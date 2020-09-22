@@ -6,6 +6,7 @@ import 'package:async/async.dart';
 import 'package:flappy_search_bar/scaled_tile.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
+import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 
 import 'search_bar_style.dart';
 
@@ -23,18 +24,11 @@ class SearchBarController<T> {
   final List<T> _list = [];
   final List<T> _filteredList = [];
   final List<T> _sortedList = [];
-  TextEditingController _searchQueryController;
   String _lastSearchedText;
   Future<List<T>> Function(String text) _lastSearchFunction;
   _ControllerListener _controllerListener;
   int Function(T a, T b) _lastSorting;
   CancelableOperation _cancelableOperation;
-  int minimumChars;
-
-  void setTextController(TextEditingController _searchQueryController, minimunChars) {
-    this._searchQueryController = _searchQueryController;
-    this.minimumChars = minimunChars;
-  }
 
   void setListener(_ControllerListener _controllerListener) {
     this._controllerListener = _controllerListener;
@@ -69,14 +63,6 @@ class SearchBarController<T> {
       _controllerListener?.onListChanged(_list);
     } catch (error) {
       _controllerListener?.onError(error);
-    }
-  }
-
-  void injectSearch(
-      String searchText, Future<List<T>> Function(String text) onSearch) {
-    if (searchText != null && searchText.length >= minimumChars) {
-      _searchQueryController.text = searchText;
-      _search(searchText, onSearch);
     }
   }
 
@@ -157,6 +143,9 @@ class SearchBar<T> extends StatefulWidget {
   /// Widget to show by default
   final Widget placeHolder;
 
+  /// Duration of the list animation when items were found
+  final Duration resultsAnimationDuration;
+
   /// Widget showed on left of the search bar
   final Widget icon;
 
@@ -227,6 +216,7 @@ class SearchBar<T> extends StatefulWidget {
     this.emptyWidget = const SizedBox.shrink(),
     this.header,
     this.placeHolder,
+    this.resultsAnimationDuration = const Duration(milliseconds: 250),
     this.icon = const Icon(Icons.search),
     this.hintText = "",
     this.hintStyle = const TextStyle(color: Color.fromRGBO(142, 142, 147, 1)),
@@ -268,7 +258,6 @@ class _SearchBarState<T> extends State<SearchBar<T>>
     searchBarController =
         widget.searchBarController ?? SearchBarController<T>();
     searchBarController.setListener(this);
-    searchBarController.setTextController(_searchQueryController, widget.minimumChars);
   }
 
   @override
@@ -338,19 +327,30 @@ class _SearchBarState<T> extends State<SearchBar<T>>
       List<T> items, Widget Function(T item, int index) builder) {
     return Padding(
       padding: widget.listPadding,
-      child: StaggeredGridView.countBuilder(
-        crossAxisCount: widget.crossAxisCount,
-        itemCount: items.length,
-        shrinkWrap: widget.shrinkWrap,
-        staggeredTileBuilder:
-            widget.indexedScaledTileBuilder ?? (int index) => ScaledTile.fit(1),
-        scrollDirection: widget.scrollDirection,
-        mainAxisSpacing: widget.mainAxisSpacing,
-        crossAxisSpacing: widget.crossAxisSpacing,
-        addAutomaticKeepAlives: true,
-        itemBuilder: (BuildContext context, int index) {
-          return builder(items[index], index);
-        },
+      child: AnimationLimiter(
+        child: StaggeredGridView.countBuilder(
+          crossAxisCount: widget.crossAxisCount,
+          itemCount: items.length,
+          shrinkWrap: widget.shrinkWrap,
+          staggeredTileBuilder: widget.indexedScaledTileBuilder ??
+              (int index) => ScaledTile.fit(1),
+          scrollDirection: widget.scrollDirection,
+          mainAxisSpacing: widget.mainAxisSpacing,
+          crossAxisSpacing: widget.crossAxisSpacing,
+          addAutomaticKeepAlives: true,
+          itemBuilder: (BuildContext context, int index) {
+            return AnimationConfiguration.staggeredList(
+              position: index,
+              duration: widget.resultsAnimationDuration,
+              child: SlideAnimation(
+                verticalOffset: 50.0,
+                child: FadeInAnimation(
+                  child: builder(items[index], index),
+                ),
+              ),
+            );
+          },
+        ),
       ),
     );
   }
